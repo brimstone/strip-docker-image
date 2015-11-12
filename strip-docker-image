@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -euo pipefail
+IMAGE=notbit-builder
+
+docker run --name tostrip --entrypoint= "${IMAGE}" >/dev/null
+
+docker export tostrip > working.tar
+
+docker rm -vf tostrip >/dev/null
+
+: > toinclude.txt
+
+# start loop
+
+docker rm -vf totest >/dev/null || true
+
+while true; do
+
+cp working.tar tostrip.tar
+
+file="$( (tar -tf tostrip.tar ; cat toinclude.txt) | sort | uniq -u | head -n 1)" || true
+
+[ -z "$file" ] && break
+
+printf "Removing $file"
+tar --delete -f tostrip.tar "$file"
+
+docker rmi tostrip >/dev/null 2>/dev/null || true
+docker import tostrip.tar tostrip >/dev/null 2>/dev/null
+printf "."
+
+ret=0
+docker run -d --name totest --entrypoint=/notbit tostrip >/dev/null 2>/dev/null || ret=$?
+printf "."
+
+[ $ret = 0 ] && sleep 5
+printf "."
+
+if [ "$(docker inspect -f '{{.State.Running}}' totest 2>/dev/null)" = "true" ]; then
+	mv tostrip.tar working.tar
+	printf "success\n"
+else
+	echo "$file" >> toinclude.txt
+	printf "fail, including\n"
+fi
+docker rm -vf totest >/dev/null 2>/dev/null
+
+done
