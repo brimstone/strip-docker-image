@@ -1,20 +1,28 @@
 #!/bin/bash
 
 set -euo pipefail
-IMAGE=notbit-builder
 
-docker run --name tostrip --entrypoint= "${IMAGE}" >/dev/null
+if [ -z "${IMAGE:-}" ]; then
+	echo "IMAGE must be declared" >&2
+	exit 1
+fi
 
-docker export tostrip > working.tar
+if ! [ -f "$1" ] && ! [ -d "$1" ]; then
+	echo "Usage: $0 <test|dir of test>" >&2
+	exit 1
+fi
 
-docker rm -vf tostrip >/dev/null
+TOSTRIPID="$(docker create "$IMAGE")"
+
+docker export "$TOSTRIPID" > working.tar
+
+docker rm -vf "$TOSTRIPID" >/dev/null
 
 : > toinclude.txt
 
 # start loop
 
-docker rm -vf totest >/dev/null || true
-
+TOSTRIPID=""
 while true; do
 
 cp working.tar tostrip.tar
@@ -23,27 +31,26 @@ file="$( (tar -tf tostrip.tar ; cat toinclude.txt) | sort | uniq -u | head -n 1)
 
 [ -z "$file" ] && break
 
-printf "Removing $file"
+printf "Removing %s" "$file"
 tar --delete -f tostrip.tar "$file"
 
-docker rmi tostrip >/dev/null 2>/dev/null || true
-docker import tostrip.tar tostrip >/dev/null 2>/dev/null
+if [ -n "$TOSTRIPID" ]; then
+	docker rmi "$TOSTRIPID" >/dev/null 2>/dev/null || true
+fi
+TOSTRIPID="$(docker import tostrip.tar 2>/dev/null)"
 printf "."
+export TOSTRIPID
 
 ret=0
-docker run -d --name totest --entrypoint=/notbit tostrip >/dev/null 2>/dev/null || ret=$?
+"$1" || ret=$?
 printf "."
 
-[ $ret = 0 ] && sleep 5
-printf "."
-
-if [ "$(docker inspect -f '{{.State.Running}}' totest 2>/dev/null)" = "true" ]; then
+if [ "$ret" = 0 ]; then
 	mv tostrip.tar working.tar
 	printf "success\n"
 else
 	echo "$file" >> toinclude.txt
 	printf "fail, including\n"
 fi
-docker rm -vf totest >/dev/null 2>/dev/null
 
 done
