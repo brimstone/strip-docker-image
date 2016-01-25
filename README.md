@@ -8,5 +8,16 @@ This probably isn't great for production use, your mileage my vary, see store fo
 Usage:
 ------
 ```bash
-strip-docker-image
+IMAGE=iamgename strip-docker-image path/to/test
+```
+
+Advanced Usage:
+---------------
+```
+docker run --rm -it \
+	-e DOCKER_HOST=tcp://172.17.0.1:2375 \
+	-e IMAGE=getpwnam \
+	-v /usr/bin/docker:/usr/bin/docker:ro \
+	strip-docker-image \
+	/tests/entrypoint
 ```
