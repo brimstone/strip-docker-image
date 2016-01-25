@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/bin/sh
 
-set -euo pipefail
+set -eu
 
 if [ -z "${IMAGE:-}" ]; then
 	echo "IMAGE must be declared" >&2
